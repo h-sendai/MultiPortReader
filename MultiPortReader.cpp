@@ -36,7 +36,6 @@ MultiPortReader::MultiPortReader(RTC::Manager* manager)
       m_OutPort("multiportreader_out", m_out_data),
       m_sock(0),
       m_recv_byte_size(0),
-      m_window_size(30),
       m_read_byte_size(0),
       m_epfd(-1),
       m_ev_ret(NULL),
@@ -131,13 +130,6 @@ int MultiPortReader::parse_params(::NVList* list)
             m_srcPort = (int)strtol(svalue.c_str(), &offset, 10);
             ports.push_back(m_srcPort);
         }
-        if (sname == "windowSize") {
-            if (m_debug) {
-                std::cerr << "window_size: " << svalue << std::endl;
-            }
-            char* offset;
-            m_window_size = (int)strtol(svalue.c_str(), &offset, 10);
-        }
         if (sname == "setRegisters") {
             if (m_debug) {
                 std::cerr << "setRegisters: " << svalue << std::endl;
@@ -164,16 +156,14 @@ int MultiPortReader::parse_params(::NVList* list)
         m_module_list.push_back(mi);
     }
 
-    m_read_byte_size =  COMET_CDC_HEADER_BYTE_SIZE
-                      + COMET_CDC_N_CHANNEL*COMET_CDC_ONE_EVENT_BYTE_SIZE*m_window_size*2;
+    //m_read_byte_size =  COMET_CDC_HEADER_BYTE_SIZE
+    //                  + COMET_CDC_N_CHANNEL*COMET_CDC_ONE_EVENT_BYTE_SIZE*m_window_size*2;
     
     for (unsigned int i = 0; i < m_module_list.size(); i++) {
         std::cerr << "ip_address: " << m_module_list[i].ip_address << std::endl;
         std::cerr << "port:       " << m_module_list[i].port       << std::endl;
         std::cerr << "module_num: " << m_module_list[i].module_num << std::endl;
     }
-    std::cerr << "m_window_size:    " << m_window_size    << std::endl;
-    std::cerr << "m_read_byte_size: " << m_read_byte_size << std::endl;
 
     return 0;
 }
@@ -351,6 +341,18 @@ int MultiPortReader::write_OutPort()
     return 0;
 }
 
+//int get_event_data_byte_size(mi->buf, EVENT_DATA_HEADER_BYTE_SIZE);
+int get_event_data_byte_size(unsigned char *buf, int data_len)
+{
+    short *len_p;
+    short len;
+
+    len_p = (short *)&buf[10];
+    len = ntohs(*len_p);
+
+    return len;
+}
+
 int MultiPortReader::daq_run()
 {
     if (m_debug) {
@@ -409,24 +411,49 @@ int MultiPortReader::daq_run()
     int status;
     for (unsigned int i = 0; i < n_readable; i++) {
         mi = (module_info *)m_ev_ret[i].data.ptr;
-        status = mi->Sock.readAll(mi->buf, m_read_byte_size);
+        // read header
+        //status = mi->Sock.readAll(mi->buf, m_read_byte_size);
+        status = mi->Sock.readAll(mi->buf, EVENT_DATA_HEADER_BYTE_SIZE);
         if (status != DAQMW::Sock::SUCCESS) {
             if (status == DAQMW::Sock::ERROR_TIMEOUT) {
-                fprintfwt(stderr, "readAll() timeout for %s\n", (mi->ip_address).c_str());
+                fprintfwt(stderr, "readAll() for header timeout for %s\n", (mi->ip_address).c_str());
                 //std::cerr << "readAll() timeout for " << mi->ip_address << std::endl;
                 fatal_error_report(USER_DEFINED_ERROR1, "READLL() TIMEOUT");
             }
             else if (status == DAQMW::Sock::ERROR_FATAL) {
-                fprintfwt(stderr, "readAll() fatal error for %s\n", (mi->ip_address).c_str());
+                fprintfwt(stderr, "readAll() for header fatal error for %s\n", (mi->ip_address).c_str());
                 //std::cerr << "readAll() fatal error for " << mi->ip_address << std::endl;
                 fatal_error_report(USER_DEFINED_ERROR1, "READLL() FATAL ERROR");
             }
             else if (status == DAQMW::Sock::ERROR_NOTSAMESIZE) {
-                fprintfwt(stderr, "readAll() not same size error for %s\n", (mi->ip_address).c_str());
+                fprintfwt(stderr, "readAll() for not same size error for %s\n", (mi->ip_address).c_str());
                 //std::cerr << "readAll() not same size  for " << mi->ip_address << std::endl;
                 fatal_error_report(USER_DEFINED_ERROR1, "READLL() NOT SAME SIZE");
             }
         }
+        int event_data_byte_size = get_event_data_byte_size(mi->buf, EVENT_DATA_HEADER_BYTE_SIZE);
+        // check event_data_byte_size here
+
+        // read event data
+        status = mi->Sock.readAll((mi->buf)+EVENT_DATA_HEADER_BYTE_SIZE, event_data_byte_size);
+        if (status != DAQMW::Sock::SUCCESS) {
+            if (status == DAQMW::Sock::ERROR_TIMEOUT) {
+                fprintfwt(stderr, "readAll() for event data timeout for %s\n", (mi->ip_address).c_str());
+                //std::cerr << "readAll() timeout for " << mi->ip_address << std::endl;
+                fatal_error_report(USER_DEFINED_ERROR1, "READLL() TIMEOUT");
+            }
+            else if (status == DAQMW::Sock::ERROR_FATAL) {
+                fprintfwt(stderr, "readAll() for event data fatal error for %s\n", (mi->ip_address).c_str());
+                //std::cerr << "readAll() fatal error for " << mi->ip_address << std::endl;
+                fatal_error_report(USER_DEFINED_ERROR1, "READLL() FATAL ERROR");
+            }
+            else if (status == DAQMW::Sock::ERROR_NOTSAMESIZE) {
+                fprintfwt(stderr, "readAll() for not same size error for %s\n", (mi->ip_address).c_str());
+                //std::cerr << "readAll() not same size  for " << mi->ip_address << std::endl;
+                fatal_error_report(USER_DEFINED_ERROR1, "READLL() NOT SAME SIZE");
+            }
+        }
+        m_read_byte_size = EVENT_DATA_HEADER_BYTE_SIZE + event_data_byte_size;
 
         // Read from one socket done.  Now trying to write outport
         set_data(mi->buf, m_read_byte_size);

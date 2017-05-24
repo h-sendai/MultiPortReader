@@ -1,0 +1,89 @@
+#!/usr/bin/env python2
+
+# Header
+# 31                 0
+# +----+----+----+----+
+# |'H' |'E' |'A' |'D' | Magic 'HEAD'
+# +----+----+----+----+
+# |0xfe|0xed|0xfe|0xed| Magic 0xfeedfeed
+# +----+----+----+----+
+# |  Mod_ID | DataLen | Mod_ID:  0 - 65535 Network Byte Order
+# +----+----+----+----+ DataLen: Data Lengty (bytes)
+# |'D' |'A' |'T' |'A' | Magic 'DATA'
+# +----+----+----+----+
+# | DATA #1 | DATA #2 | One Data size = 2 bytes
+# +----+----+----+----+
+#           :
+# +----+----+----+----+
+# |DATA #N-1| DATA #N | N = DataLen / 2
+# +----+----+----+----+
+
+import os
+import sys
+import time # for sleep
+import struct
+# import socket
+import MySocket
+
+def has_valid_header(header):
+    head, feed, mod_id, data_len, data = struct.unpack('>4sI2H4s', header)
+    if head != 'HEAD':
+        sys.stderr.write('HEAD string error: %s\n' % (head))
+        return False
+    if feed != 0xfeedfeed:
+        sys.stderr.write('0xfeedfeed error: %X' % (feed))
+        return False
+    if data != 'DATA':
+        sys.stderr.write('DATA string error')
+        return False
+
+    return True
+    
+def get_data_len(header):
+    head, feed, mod_id, data_len, data = struct.unpack('>4sI2H4s', header)
+    return data_len
+    
+def get_mod_id(header):
+    head, feed, mod_id, data_len, data = struct.unpack('>4sI2H4s', header)
+    return mod_id
+
+def main():
+    host = '127.0.0.1'
+    port = 2222
+    header_size_bytes = 16
+
+    if len(sys.argv) == 2:
+        host = sys.argv[1]
+    elif len(sys.argv) == 3:
+        host = sys.argv[1]
+        port = int(sys.argv[2])
+
+    s = MySocket.MySocket()
+    s.connect(host, port)
+    
+    count = 0
+    total_bytes = 0
+    while True:
+        if count % 1000 == 0:
+            sys.stderr.write('%d %d kB\n' % (count, total_bytes/1024))
+        count += 1
+        header = s.recv_all(header_size_bytes)
+        if len(header) != header_size_bytes:
+            sys.stderr.write('invalid header size: %d, should be %d bytes' % \
+                (len(header), header_size_bytes))
+            sys.exit(1)
+        if not has_valid_header(header):
+            sys.stderr.write('invalid header')
+            sys.exit(1)
+        data_len = get_data_len(header)
+        total_bytes += (data_len + header_size_bytes)
+        data = s.recv_all(data_len)
+        if len(data) != data_len:
+            sys.stderr.write('data length does not match: %d in header, %d read\n' % \
+                (data_len, len(data)))
+            sys.exit(1)
+
+    s.close()
+
+if __name__ == '__main__':
+    main()

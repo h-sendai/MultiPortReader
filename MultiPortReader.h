@@ -19,12 +19,16 @@
 
 using namespace RTC;
 
+static const int EVENT_DATA_HEADER_BYTE_SIZE = 16;
+static const int MAX_EVENT_DATA_BYTE_SIZE    = 16*1024; // 16 kB
+
 struct module_info {
     DAQMW::Sock Sock;
     std::string ip_address;
     int         port;
     int         module_num;
-    unsigned char buf[16*1024]; // 16kB buffer
+    unsigned char buf[EVENT_DATA_HEADER_BYTE_SIZE + MAX_EVENT_DATA_BYTE_SIZE]; 
+    // header + max event data = 16B + 16kB
 };
 
 class MultiPortReader
@@ -65,10 +69,6 @@ private:
     DAQMW::Sock* m_sock;               /// socket for data server
 
     unsigned int  m_recv_byte_size;
-    static const int COMET_CDC_HEADER_BYTE_SIZE    = 12;
-    static const int COMET_CDC_ONE_EVENT_BYTE_SIZE = 2;
-    static const int COMET_CDC_N_CHANNEL           = 64;
-    unsigned int  m_window_size;
     unsigned int  m_read_byte_size;
     int m_epfd;
     struct epoll_event *m_ev_ret;

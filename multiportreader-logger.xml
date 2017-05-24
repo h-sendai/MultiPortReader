@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<configInfo>
+  <daqOperator>
+    <hostAddr>127.0.0.1</hostAddr>
+  </daqOperator>
+  <daqGroups>
+    <daqGroup gid="group0">
+      <components>
+        <component cid="MultiPortReader0">
+          <hostAddr>127.0.0.1</hostAddr>
+          <hostPort>50000</hostPort>
+          <instName>MultiPortReader0.rtc</instName>
+          <execPath>/home/daq/MyDaq/MultiPortReader/MultiPortReaderComp</execPath>
+          <confFile>/tmp/daqmw/rtc.conf</confFile>
+          <startOrd>2</startOrd>
+          <inPorts/>
+          <outPorts>
+            <outPort>multiportreader_out</outPort>
+          </outPorts>
+          <params>
+            <param pid="srcAddr">127.0.0.1</param>
+            <param pid="srcPort">2222</param>
+          </params>
+        </component>
+        <component cid="SampleLogger0">
+          <hostAddr>127.0.0.1</hostAddr>
+          <hostPort>50000</hostPort>
+          <instName>SampleLogger0.rtc</instName>
+          <execPath>/home/daq/MyDaq/SampleLogger/SampleLoggerComp</execPath>
+          <confFile>/tmp/daqmw/rtc.conf</confFile>
+          <startOrd>1</startOrd>
+          <inPorts>
+            <inPort from="MultiPortReader0:multiportreader_out">samplelogger_in</inPort>
+          </inPorts>
+          <outPorts>
+          </outPorts>
+          <params>
+            <param pid="dirName">/tmp</param>
+            <param pid="isLogging">no</param>
+            <param pid="maxFileSizeInMegaByte">1024</param>
+          </params>
+        </component>
+      </components>
+    </daqGroup>
+  </daqGroups>
+</configInfo>

@@ -1,0 +1,129 @@
+#!/usr/bin/env python2
+
+# Header
+# 31                 0
+# +----+----+----+----+
+# |'H' |'E' |'A' |'D' | Magic 'HEAD'
+# +----+----+----+----+
+# |0xfe|0xed|0xfe|0xed| Magic 0xfeedfeed
+# +----+----+----+----+
+# |  Mod_ID | DataLen | Mod_ID:  0 - 65535 Network Byte Order
+# +----+----+----+----+ DataLen: Data Lengty (bytes)
+# |'D' |'A' |'T' |'A' | Magic 'DATA'
+# +----+----+----+----+
+# | DATA #1 | DATA #2 | One Data size = 2 bytes
+# +----+----+----+----+
+#           :
+# +----+----+----+----+
+# |DATA #N-1| DATA #N | N = DataLen / 2
+# +----+----+----+----+
+
+import os
+import sys
+import time
+from optparse import OptionParser
+import struct
+import socket
+import random
+
+options      = {}
+cmdline_args = []
+program_ver  = '1.0'
+
+def process_options():
+# We can refer options by options.debug, options.verbose etc.
+
+    global options
+    global cmdline_args
+    global parser
+
+    version = '%prog' + ' %s' % (program_ver)
+    parser = OptionParser(usage = 'usage: %prog [options] mod_id', version = version)
+
+    # -d, --debug
+    parser.add_option('-d', '--debug',
+                      action = 'store_true',
+                      dest   = 'debug',
+                      help   = 'show debug message')
+    parser.set_defaults(debug = False)
+
+    # -v, --verbose
+    parser.add_option('-v', '--verbose',
+                      action = 'count',
+                      dest   = 'verbose',
+                      help   = 'print verbose message')
+    parser.set_defaults(verbose = 0)
+
+    # -p, --port
+    parser.add_option('-p', '--port',
+                      action = 'store',
+                      type   = 'int',
+                      dest   = 'port',
+                      help   = 'specify port number (default: %default)')
+    parser.set_defaults(port = 2222)
+
+    # -m, --mod_id
+    parser.add_option('-m', '--mod_id',
+                      action = 'store',
+                      type   = 'int',
+                      dest   = 'mod_id',
+                      help   = 'specify module ID (default: %default)')
+    parser.set_defaults(mod_id = 0)
+
+    # -s, --sleep
+    parser.add_option('-s', '--sleep',
+                      action = 'store',
+                      type   = 'float',
+                      dest   = 'sleep_sec',
+                      help   = 'specify sleep seconds (default: %default)')
+    parser.set_defaults(sleep_sec = 0)
+
+    (options, cmdline_args) = parser.parse_args()
+
+def print_options_and_args():
+    # don't need "global options" to read global variable
+    print 'option dump:', options
+
+    if len(cmdline_args) > 0:
+        print 'cmdline_args:', cmdline_args
+
+def create_header(mod_id = 0, data_len = 16):
+    # data_len: bytes
+    #return struct.pack('>BBBBHH', 0xc0, 0xde, 0xc0, 0xde, mod_id, data_len)
+    return struct.pack('>BBBBBBBBHHBBBB', \
+        ord('H'), ord('E'), ord('A'), ord('D'),0xfe, 0xed, 0xfe, 0xed,\
+        mod_id, data_len, ord('D'), ord('A'), ord('T'), ord('A'))
+
+def main():
+    process_options()
+    if options.debug:
+        print_options_and_args()
+
+    s = socket.socket()
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    s.bind(('', options.port))
+    s.listen(10)
+
+    max_n_data = 65536
+    fmt = '>%dH' % (max_n_data)
+    data_bin = range(max_n_data)
+    data = struct.pack(fmt, *data_bin)
+
+    while True:
+        connfd, addr = s.accept()
+        sys.stderr.write('connection from:   %s, remote port: %d\n' % (addr[0], addr[1]))
+        while True:
+            data_len_bytes = 16*int(random.uniform(64, 1024+1))
+            # 4 k bytes - 16 k byte
+            header = create_header(options.mod_id, data_len_bytes)
+            try:
+                connfd.send(header + data[0:data_len_bytes])
+                if options.sleep_sec > 0:
+                    time.sleep(options.sleep_sec)
+            except socket.error as (en, estring):
+                connfd.close()
+                sys.stderr.write('%d %s\n' % (en, estring))
+                break
+
+if __name__ == '__main__':
+    main()
